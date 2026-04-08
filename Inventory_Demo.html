@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventory Management System — DB Demo</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3e;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --redis: #e53e3e;
+    --redis-bg: #1a0a0a;
+    --mongo: #4db33d;
+    --mongo-bg: #091a08;
+    --neo4j: #0087cc;
+    --neo4j-bg: #040f1a;
+    --accent: #7c3aed;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: linear-gradient(135deg, #1a1d27 0%, #0f1117 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header .logo { font-size: 28px; }
+  header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+  header p  { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    background: var(--surface);
+  }
+  .tab {
+    padding: 14px 24px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    color: var(--muted);
+    transition: all .2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active-redis  { color: var(--redis);  border-bottom-color: var(--redis); }
+  .tab.active-mongo  { color: var(--mongo);  border-bottom-color: var(--mongo); }
+  .tab.active-neo4j  { color: var(--neo4j);  border-bottom-color: var(--neo4j); }
+  .tab.active-theory { color: var(--accent); border-bottom-color: var(--accent); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  /* ── PANELS ── */
+  .panel { display: none; padding: 32px; max-width: 960px; margin: 0 auto; }
+  .panel.active { display: block; }
+
+  /* ── SECTION CARD ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ── DB BADGE ── */
+  .db-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .badge-redis { background: rgba(229,62,62,.15); color: var(--redis); border: 1px solid rgba(229,62,62,.3); }
+  .badge-mongo { background: rgba(77,179,61,.15); color: var(--mongo); border: 1px solid rgba(77,179,61,.3); }
+  .badge-neo4j { background: rgba(0,135,204,.15); color: var(--neo4j); border: 1px solid rgba(0,135,204,.3); }
+
+  /* ── ENDPOINT BUILDER ── */
+  .endpoint-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .method-badge {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 8px;
+    border-radius: 4px;
+    width: 52px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .get    { background: rgba(72,199,142,.15); color: #48c78e; border: 1px solid rgba(72,199,142,.3); }
+  .post   { background: rgba(255,179,0,.15);  color: #f0a500; border: 1px solid rgba(255,179,0,.3); }
+  .put    { background: rgba(100,108,255,.15); color: #6467ff; border: 1px solid rgba(100,108,255,.3); }
+  .delete { background: rgba(229,62,62,.15);  color: #fc8181; border: 1px solid rgba(229,62,62,.3); }
+
+  .endpoint-url {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    flex: 1;
+  }
+  button.run-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 7px 16px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .2s;
+  }
+  button.run-btn:hover { opacity: .85; }
+  button.run-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── INPUTS ── */
+  .input-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  input[type="text"], textarea, select {
+    background: #0f1117;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+  }
+  input[type="text"] { flex: 1; min-width: 120px; }
+  input[type="text"]:focus, textarea:focus { border-color: var(--accent); }
+  textarea { width: 100%; min-height: 80px; resize: vertical; font-family: 'Courier New', monospace; font-size: 12px; }
+
+  /* ── RESPONSE ── */
+  .response-box {
+    background: #080a0f;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    color: #a8b5c9;
+    margin-top: 12px;
+  }
+  .response-box.success { border-color: rgba(72,199,142,.4); }
+  .response-box.error   { border-color: rgba(229,62,62,.4); color: #fc8181; }
+  .response-box.rate    { border-color: rgba(255,179,0,.5); color: #f0c070; }
+
+  /* ── GRAPH VIZ ── */
+  .graph-container {
+    background: #050810;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+  }
+  svg.graph { width: 100%; height: 380px; }
+  .node circle  { stroke-width: 2; cursor: pointer; }
+  .node text    { font-size: 11px; fill: var(--text); pointer-events: none; text-anchor: middle; }
+  .node.product circle    { fill: #1a2a1a; stroke: var(--mongo); }
+  .node.manufacturer circle { fill: #0a1a2a; stroke: var(--neo4j); }
+  .node.category circle   { fill: #1a1a2a; stroke: var(--accent); }
+  .node.region circle     { fill: #1a100a; stroke: #f6ad55; }
+  .link { stroke: #3a4060; stroke-width: 1.5; }
+  .link-label { font-size: 9px; fill: #5a6080; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .legend-dot  { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+
+  /* ── RATE METER ── */
+  .rate-meter {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0;
+    align-items: center;
+  }
+  .rate-pip {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: var(--border);
+    border: 1px solid #3a3d50;
+    transition: all .3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+  .rate-pip.used    { background: rgba(229,62,62,.3); border-color: var(--redis); }
+  .rate-pip.blocked { background: rgba(229,62,62,.6); border-color: var(--redis); animation: pulse .6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  /* ── THEORY ── */
+  .theory-section { margin-bottom: 24px; }
+  .theory-section h3 { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+  .theory-section p, .theory-section li { font-size: 14px; color: #bcc5d1; line-height: 1.7; }
+  .theory-section ul { padding-left: 20px; }
+  .theory-section li { margin-bottom: 6px; }
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .compare-table th { background: #1a1d27; padding: 10px 14px; text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .compare-table td { padding: 10px 14px; border-top: 1px solid var(--border); vertical-align: top; }
+  .compare-table tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #3a3d50; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📦</div>
+  <div>
+    <h1>Inventory Management System</h1>
+    <p>Three unstructured databases · Redis · MongoDB · Neo4j</p>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active-redis" id="tab-redis" onclick="switchTab('redis')">
+    <span class="dot" style="background:var(--redis)"></span>Redis Rate Limiter
+  </div>
+  <div class="tab" id="tab-mongo" onclick="switchTab('mongo')">
+    <span class="dot" style="background:var(--mongo)"></span>MongoDB Inventory
+  </div>
+  <div class="tab" id="tab-neo4j" onclick="switchTab('neo4j')">
+    <span class="dot" style="background:var(--neo4j)"></span>Neo4j Graph
+  </div>
+  <div class="tab" id="tab-theory" onclick="switchTab('theory')">
+    <span class="dot" style="background:var(--accent)"></span>Theory & Architecture
+  </div>
+</div>
+
+<!-- ═══════════════ REDIS PANEL ═══════════════ -->
+<div class="panel active" id="panel-redis">
+
+  <div class="card">
+    <div class="card-title">
+      <span class="db-badge badge-redis">🔴 Redis</span>
+      Rate Limiter · Port 2100 · 5 req/min
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      Each click = one request. Redis uses <strong style="color:var(--text)">INCR + TTL</strong> on a key like
+      <code style="color:var(--redis)">rate_limit:&lt;ip&gt;</code> to atomically count and auto-expire.
+    </p>
+    <div class="rate-meter" id="rate-meter">
+      <span style="font-size:12px;color:var(--muted);margin-right:4px">Requests:</span>
+    </div>
+    <p id="rate-status" style="font-size:12px;color:var(--muted);margin-bottom:14px">0 / 5 used</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🏓 /ping — Rate-Limited Endpoint</div>
+    <div class="endpoint-row">
+      <span class="method-badge get">GET</span>
+      <span class="endpoint-url">http://localhost:2100/ping</span>
+      <button class="run-btn" onclick="demoRateLimit()">Fire Request</button>
+      <button class="run-btn" style="background:#2a2d3e;color:var(--muted)" onclick="resetRateMeter()">Reset</button>
+    </div>
+    <div class="response-box" id="res-rate">// Click "Fire Request" to simulate — Redis INCR + TTL</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 /status — View Your Window</div>
+    <div class="endpoint-row">
+      <span class="method-badge get">GET</span>
+      <span class="endpoint-url">http://localhost:2100/status</span>
+      <button class="run-btn" onclick="showStatus()">Check Status</button>
+    </div>
+    <div class="response-box" id="res-status">// Returns remaining requests in current window</div>
+  </div>
+
+  <div class="card" style="background:var(--redis-bg);border-color:rgba(229,62,62,.2)">
+    <div class="card-title">💡 Why Redis for Rate Limiting?</div>
+    <table class="compare-table">
+      <tr><th>Property</th><th>Redis</th><th>Alternative (SQL)</th></tr>
+      <tr><td>Operation</td><td style="color:#48c78e">Atomic INCR — nanoseconds</td><td style="color:#fc8181">UPDATE + SELECT — microseconds</td></tr>
+      <tr><td>TTL</td><td style="color:#48c78e">Native EXPIRE command</td><td style="color:#fc8181">Cron job to delete expired rows</td></tr>
+      <tr><td>Race condition</td><td style="color:#48c78e">Impossible — single-threaded</td><td style="color:#fc8181">Possible without transactions</td></tr>
+      <tr><td>Memory</td><td style="color:#48c78e">Only stores active windows</td><td style="color:#fc8181">Rows accumulate</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════ MONGO PANEL ═══════════════ -->
+<div class="panel" id="panel-mongo">
+  <div class="card">
+    <div class="card-title">
+      <span class="db-badge badge-mongo">🍃 MongoDB</span>
+      Inventory CRUD · Port 3000
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      Products are stored as flexible BSON <strong style="color:var(--text)">documents</strong>.
+      A laptop has CPU/RAM specs; a chair has material/weight — no rigid schema needed.
+    </p>
+  </div>
+
+  <!-- View All -->
+  <div class="card">
+    <div class="card-title">📋 View All Products</div>
+    <div class="endpoint-row">
+      <span class="method-badge get">GET</span>
+      <span class="endpoint-url">/inventory</span>
+      <button class="run-btn" onclick="mongoViewAll()">Run Query</button>
+    </div>
+    <div class="response-box" id="res-mongo-all">// MongoDB: db.products.find({})</div>
+  </div>
+
+  <!-- View by ID -->
+  <div class="card">
+    <div class="card-title">🔍 View by ID</div>
+    <div class="endpoint-row">
+      <span class="method-badge get">GET</span>
+      <input type="text" id="view-id" placeholder="Product ID (from list above)">
+      <button class="run-btn" onclick="mongoViewId()">Fetch</button>
+    </div>
+    <div class="response-box" id="res-mongo-id">// MongoDB: db.products.findOne({ _id: ObjectId(...) })</div>
+  </div>
+
+  <!-- Add Product -->
+  <div class="card">
+    <div class="card-title">➕ Add Product</div>
+    <div class="input-row">
+      <input type="text" id="new-name" placeholder="Product name" style="flex:2">
+      <input type="text" id="new-cat" placeholder="Category">
+      <input type="text" id="new-mfg" placeholder="Manufacturer">
+    </div>
+    <div class="input-row">
+      <input type="text" id="new-price" placeholder="Price (e.g. 299.99)">
+      <input type="text" id="new-stock" placeholder="Stock qty">
+    </div>
+    <div class="endpoint-row" style="margin-top:4px">
+      <span class="method-badge post">POST</span>
+      <span class="endpoint-url">/inventory</span>
+      <button class="run-btn" onclick="mongoAdd()">Insert Document</button>
+    </div>
+    <div class="response-box" id="res-mongo-add">// MongoDB: db.products.insertOne({...})</div>
+  </div>
+
+  <!-- Update -->
+  <div class="card">
+    <div class="card-title">✏️ Update Product</div>
+    <div class="input-row">
+      <input type="text" id="upd-id" placeholder="Product ID">
+      <input type="text" id="upd-stock" placeholder="New stock qty">
+      <input type="text" id="upd-price" placeholder="New price">
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge put">PUT</span>
+      <span class="endpoint-url">/inventory/:id</span>
+      <button class="run-btn" onclick="mongoUpdate()">Update</button>
+    </div>
+    <div class="response-box" id="res-mongo-upd">// MongoDB: db.products.updateOne({ _id }, { $set: {...} })</div>
+  </div>
+
+  <!-- Delete -->
+  <div class="card">
+    <div class="card-title">🗑️ Delete Product</div>
+    <div class="endpoint-row">
+      <span class="method-badge delete">DEL</span>
+      <input type="text" id="del-id" placeholder="Product ID to delete">
+      <button class="run-btn" style="background:#7a1a1a" onclick="mongoDelete()">Delete</button>
+    </div>
+    <div class="response-box" id="res-mongo-del">// MongoDB: db.products.deleteOne({ _id })</div>
+  </div>
+</div>
+
+<!-- ═══════════════ NEO4J PANEL ═══════════════ -->
+<div class="panel" id="panel-neo4j">
+  <div class="card">
+    <div class="card-title">
+      <span class="db-badge badge-neo4j">🔵 Neo4j</span>
+      Product–Manufacturer Graph · Port 4000
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      Nodes represent entities; edges represent relationships.
+      Traverse the supply chain in O(relationship) time — impossible to do efficiently in SQL.
+    </p>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div class="legend-item"><span class="legend-dot" style="border-color:var(--mongo)"></span>Product</div>
+      <div class="legend-item"><span class="legend-dot" style="border-color:var(--neo4j)"></span>Manufacturer</div>
+      <div class="legend-item"><span class="legend-dot" style="border-color:var(--accent)"></span>Category</div>
+      <div class="legend-item"><span class="legend-dot" style="border-color:#f6ad55"></span>Region</div>
+    </div>
+  </div>
+
+  <div class="graph-container">
+    <svg class="graph" id="graph-svg"></svg>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔎 Graph Queries</div>
+    <div class="endpoint-row">
+      <span class="method-badge get">GET</span>
+      <span class="endpoint-url">/graph/products</span>
+      <button class="run-btn" onclick="neo4jQuery('products')">All Products</button>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge get">GET</span>
+      <span class="endpoint-url">/graph/manufacturers</span>
+      <button class="run-btn" onclick="neo4jQuery('manufacturers')">All Manufacturers</button>
+    </div>
+    <div class="endpoint-row">
+      <span class="method-badge get">GET</span>
+      <input type="text" id="graph-node-id" placeholder="Node ID (e.g. n5)">
+      <button class="run-btn" onclick="neo4jNodeQuery()">Node Relationships</button>
+    </div>
+    <div class="response-box" id="res-neo4j">// Cypher: MATCH (n)-[r]->(m) RETURN n, r, m</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🛤️ Shortest Path</div>
+    <div class="endpoint-row">
+      <input type="text" id="path-from" placeholder="From node ID (e.g. n7)">
+      <input type="text" id="path-to" placeholder="To node ID (e.g. n3)">
+      <button class="run-btn" onclick="neo4jPath()">Find Path</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:6px">
+      Cypher: <code>MATCH p=shortestPath((a)-[*]-(b)) RETURN p</code>
+    </p>
+    <div class="response-box" id="res-path">// Enter node IDs from the graph above</div>
+  </div>
+</div>
+
+<!-- ═══════════════ THEORY PANEL ═══════════════ -->
+<div class="panel" id="panel-theory">
+  <div class="card">
+    <div class="card-title" style="font-size:16px;text-transform:none;letter-spacing:0;color:var(--text)">
+      📖 System Architecture & Theoretical Reasoning
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="theory-section">
+      <h3 style="color:var(--redis)">1. Rate Limiter — Redis (Key-Value Store)</h3>
+      <p><strong>Working:</strong> Every incoming HTTP request is identified by IP address.
+      Redis stores a key <code>rate_limit:&lt;ip&gt;</code> with an integer counter.
+      The <code>INCR</code> command atomically increments this counter.
+      On first call, an <code>EXPIRE</code> of 60s is set. When the counter exceeds 5,
+      a 429 Too Many Requests response is returned. After 60s, the key vanishes automatically.</p>
+      <br>
+      <p><strong>Structural Concept:</strong> Redis is a single-threaded, in-memory key-value store.
+      Its data model is: <code>STRING key → INTEGER value</code>. No tables, no joins, no schema.
+      Pure atomic operations on named counters — exactly what rate limiting needs.</p>
+      <br>
+      <p><strong>Reasoning:</strong> SQL would require a table with IP, count, window_start columns,
+      a transaction with SELECT FOR UPDATE, and a cron to clean expired rows.
+      Redis replaces all of this with two commands: <code>INCR</code> and <code>EXPIRE</code>.
+      The sub-millisecond response ensures rate checking adds near-zero latency to every request.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="theory-section">
+      <h3 style="color:var(--mongo)">2. Inventory Management — MongoDB (Document Store)</h3>
+      <p><strong>Working:</strong> Each product is stored as a JSON-like BSON document with a unique
+      <code>_id</code>. Documents can have different shapes — a laptop document has
+      <code>specs.cpu</code> while a chair document has <code>specs.material</code>.
+      The API performs CRUD using MongoDB's <code>find</code>, <code>insertOne</code>,
+      <code>updateOne</code>, and <code>deleteOne</code> operations.</p>
+      <br>
+      <p><strong>Structural Concept:</strong> MongoDB organises data as a hierarchy:
+      Database → Collection → Document. A document is a BSON object with no enforced schema.
+      Fields can be nested, arrays can be embedded. This is an unstructured/semi-structured model.</p>
+      <br>
+      <p><strong>Reasoning:</strong> Inventory is naturally heterogeneous. A relational DB forces a
+      Products table with 50 nullable columns (most NULL for any given row) or complex
+      entity–attribute–value patterns. MongoDB stores each product's real attributes only.
+      Rich queries still work: find all Electronics under ₹1000 in one query.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="theory-section">
+      <h3 style="color:var(--neo4j)">3. Product-Manufacturer Correlation — Neo4j (Graph DB)</h3>
+      <p><strong>Working:</strong> Entities (Product, Manufacturer, Category, Region) are <strong>nodes</strong>.
+      Their connections (MANUFACTURED_BY, SUPPLIES, BELONGS_TO, LOCATED_IN) are <strong>directed edges</strong>
+      with properties. Neo4j's Cypher query language allows pattern matching:
+      <code>MATCH (p:Product)-[:MANUFACTURED_BY]->(m)</code> traverses relationships without JOINs.</p>
+      <br>
+      <p><strong>Structural Concept:</strong> A property graph consists of:
+      nodes (vertex with label + properties) and relationships (directed edge with type + properties).
+      Neo4j stores adjacency lists natively — each node contains direct pointers to its relationships,
+      making traversal O(relationship count), not O(table size).</p>
+      <br>
+      <p><strong>Reasoning:</strong> "Which products share a component supplier with a competitor?"
+      requires a 3-hop traversal. In SQL this is 3 JOINs across 4 tables with exponential row growth.
+      In Neo4j it's a single <code>MATCH</code> pattern. Supply chain analysis, manufacturer correlation,
+      and shortest-path queries are native graph problems that graph DBs solve in milliseconds.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="theory-section">
+      <h3>🔀 DB Selection Summary</h3>
+      <table class="compare-table">
+        <tr>
+          <th>Module</th><th>DB</th><th>DB Type</th><th>Key Reason</th>
+        </tr>
+        <tr>
+          <td>Rate Limiter</td>
+          <td style="color:var(--redis)">Redis</td>
+          <td>Key-Value (In-Memory)</td>
+          <td>Atomic INCR, native TTL, sub-ms latency</td>
+        </tr>
+        <tr>
+          <td>Inventory CRUD</td>
+          <td style="color:var(--mongo)">MongoDB</td>
+          <td>Document Store</td>
+          <td>Schema-free product docs, JSON-native API</td>
+        </tr>
+        <tr>
+          <td>Supply Chain Graph</td>
+          <td style="color:var(--neo4j)">Neo4j</td>
+          <td>Graph Database</td>
+          <td>Native relationship traversal, Cypher queries</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// SIMULATED BACKEND STATE (mirrors the server code)
+// In production these would be real fetch() calls to the servers
+// ═══════════════════════════════════════════════════════════════
+
+// ── Tab switching ─────────────────────────────────────────────
+let currentTab = 'redis';
+function switchTab(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => {
+    t.className = 'tab';
+  });
+  document.getElementById('panel-' + name).classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active-' + name);
+  currentTab = name;
+  if (name === 'neo4j') setTimeout(drawGraph, 100);
+}
+// Init first tab class
+document.getElementById('tab-redis').classList.add('active-redis');
+
+// ═══════════════════════════════════════════════════════════════
+// REDIS RATE LIMITER SIMULATION
+// ═══════════════════════════════════════════════════════════════
+let requestCount = 0;
+const RATE_LIMIT = 5;
+let windowStart = Date.now();
+const WINDOW_MS = 60000;
+
+function getRedisState() {
+  const now = Date.now();
+  if (now - windowStart > WINDOW_MS) {
+    requestCount = 0;
+    windowStart = now;
+  }
+  return { count: requestCount, ttl: Math.ceil((WINDOW_MS - (now - windowStart)) / 1000) };
+}
+
+function renderRateMeter() {
+  const meter = document.getElementById('rate-meter');
+  const { count } = getRedisState();
+  meter.innerHTML = '<span style="font-size:12px;color:var(--muted);margin-right:4px">Requests:</span>';
+  for (let i = 1; i <= RATE_LIMIT + 1; i++) {
+    const pip = document.createElement('div');
+    pip.className = 'rate-pip';
+    if (i <= count && i <= RATE_LIMIT) { pip.className += ' used'; pip.textContent = '✓'; }
+    else if (i === RATE_LIMIT + 1 && count > RATE_LIMIT) { pip.className += ' blocked'; pip.textContent = '✗'; }
+    meter.appendChild(pip);
+  }
+  const rem = Math.max(0, RATE_LIMIT - count);
+  document.getElementById('rate-status').textContent =
+    `${count} / ${RATE_LIMIT} used · ${rem} remaining · window resets in ${getRedisState().ttl}s`;
+}
+
+function demoRateLimit() {
+  requestCount++;
+  renderRateMeter();
+  const { count, ttl } = getRedisState();
+  const box = document.getElementById('res-rate');
+  const key = `rate_limit:127.0.0.1`;
+
+  if (count > RATE_LIMIT) {
+    box.className = 'response-box error';
+    box.textContent = JSON.stringify({
+      status: 429,
+      error: 'Too Many Requests',
+      message: `Rate limit of ${RATE_LIMIT} req/min exceeded.`,
+      retryAfterSeconds: ttl,
+      redis: { key, value: count, ttl: `${ttl}s` },
+      headers: {
+        'X-RateLimit-Limit': RATE_LIMIT,
+        'X-RateLimit-Remaining': 0,
+        'X-RateLimit-Reset': ttl
+      }
+    }, null, 2);
+    return;
+  }
+
+  box.className = count >= RATE_LIMIT ? 'response-box rate' : 'response-box success';
+  box.textContent = JSON.stringify({
+    status: 200,
+    message: 'pong 🏓',
+    redis: {
+      key,
+      operation: 'INCR → ' + count,
+      ttl: `${ttl}s (auto-expires)`,
+    },
+    rateLimit: { used: count, remaining: RATE_LIMIT - count, limit: RATE_LIMIT },
+    db: 'Redis'
+  }, null, 2);
+}
+
+function showStatus() {
+  const { count, ttl } = getRedisState();
+  const box = document.getElementById('res-status');
+  box.className = 'response-box success';
+  box.textContent = JSON.stringify({
+    ip: '127.0.0.1',
+    redisKey: 'rate_limit:127.0.0.1',
+    used: count,
+    remaining: Math.max(0, RATE_LIMIT - count),
+    limit: RATE_LIMIT,
+    resetsIn: `${ttl}s`,
+    db: 'Redis'
+  }, null, 2);
+}
+
+function resetRateMeter() {
+  requestCount = 0;
+  windowStart = Date.now();
+  renderRateMeter();
+  document.getElementById('res-rate').className = 'response-box';
+  document.getElementById('res-rate').textContent = '// Counter reset — Redis DEL rate_limit:127.0.0.1';
+}
+
+renderRateMeter();
+
+// ═══════════════════════════════════════════════════════════════
+// MONGODB INVENTORY SIMULATION
+// ═══════════════════════════════════════════════════════════════
+let mongoIdCounter = 100;
+const mongoStore = new Map();
+
+function mongoInsert(doc) {
+  const _id = 'doc_' + (mongoIdCounter++);
+  const saved = { ...doc, _id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  mongoStore.set(_id, saved);
+  return saved;
+}
+
+// Seed
+mongoInsert({ name: 'Laptop Pro 15', category: 'Electronics', manufacturer: 'TechCorp', price: 1299.99, stock: 42, specs: { cpu: 'Intel i7', ram: '16GB' } });
+mongoInsert({ name: 'Wireless Mouse', category: 'Electronics', manufacturer: 'PeriphCo',  price: 29.99,  stock: 150, specs: { dpi: 1600 } });
+mongoInsert({ name: 'Office Chair Ergo', category: 'Furniture', manufacturer: 'ComfortMakers', price: 499.00, stock: 18, specs: { material: 'Mesh' } });
+
+function mongoViewAll() {
+  const products = Array.from(mongoStore.values());
+  const box = document.getElementById('res-mongo-all');
+  box.className = 'response-box success';
+  box.textContent = JSON.stringify({ db: 'MongoDB', operation: 'db.products.find({})', count: products.length, products }, null, 2);
+}
+
+function mongoViewId() {
+  const id = document.getElementById('view-id').value.trim();
+  const box = document.getElementById('res-mongo-id');
+  const doc = mongoStore.get(id);
+  if (!doc) {
+    box.className = 'response-box error';
+    box.textContent = JSON.stringify({ error: 'Product not found', id, hint: 'Copy an _id from the "View All" result' }, null, 2);
+    return;
+  }
+  box.className = 'response-box success';
+  box.textContent = JSON.stringify({ db: 'MongoDB', operation: `db.products.findOne({ _id: '${id}' })`, product: doc }, null, 2);
+}
+
+function mongoAdd() {
+  const name  = document.getElementById('new-name').value.trim();
+  const cat   = document.getElementById('new-cat').value.trim();
+  const mfg   = document.getElementById('new-mfg').value.trim();
+  const price = parseFloat(document.getElementById('new-price').value);
+  const stock = parseInt(document.getElementById('new-stock').value);
+  const box   = document.getElementById('res-mongo-add');
+  if (!name || isNaN(price) || isNaN(stock)) {
+    box.className = 'response-box error';
+    box.textContent = JSON.stringify({ error: 'name, price, and stock are required' }, null, 2);
+    return;
+  }
+  const doc = mongoInsert({ name, category: cat || 'Uncategorized', manufacturer: mfg || 'Unknown', price, stock, specs: {} });
+  box.className = 'response-box success';
+  box.textContent = JSON.stringify({ db: 'MongoDB', operation: 'db.products.insertOne({...})', message: 'Document inserted', product: doc }, null, 2);
+  ['new-name','new-cat','new-mfg','new-price','new-stock'].forEach(id => document.getElementById(id).value = '');
+}
+
+function mongoUpdate() {
+  const id    = document.getElementById('upd-id').value.trim();
+  const stock = document.getElementById('upd-stock').value;
+  const price = document.getElementById('upd-price').value;
+  const box   = document.getElementById('res-mongo-upd');
+  const doc   = mongoStore.get(id);
+  if (!doc) {
+    box.className = 'response-box error';
+    box.textContent = JSON.stringify({ error: 'Product not found', id }, null, 2);
+    return;
+  }
+  const update = {};
+  if (stock) update.stock = parseInt(stock);
+  if (price) update.price = parseFloat(price);
+  const updated = { ...doc, ...update, updatedAt: new Date().toISOString() };
+  mongoStore.set(id, updated);
+  box.className = 'response-box success';
+  box.textContent = JSON.stringify({ db: 'MongoDB', operation: `db.products.updateOne({ _id }, { $set: ${JSON.stringify(update)} })`, product: updated }, null, 2);
+}
+
+function mongoDelete() {
+  const id  = document.getElementById('del-id').value.trim();
+  const box = document.getElementById('res-mongo-del');
+  if (!mongoStore.has(id)) {
+    box.className = 'response-box error';
+    box.textContent = JSON.stringify({ error: 'Product not found', id }, null, 2);
+    return;
+  }
+  mongoStore.delete(id);
+  box.className = 'response-box success';
+  box.textContent = JSON.stringify({ db: 'MongoDB', operation: `db.products.deleteOne({ _id: '${id}' })`, message: 'Document deleted', deletedId: id }, null, 2);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NEO4J GRAPH SIMULATION
+// ═══════════════════════════════════════════════════════════════
+const gNodes = [
+  { id: 'n1', label: 'Region',       name: 'North America', x: 100, y: 80 },
+  { id: 'n2', label: 'Region',       name: 'Europe',        x: 700, y: 80 },
+  { id: 'n3', label: 'Region',       name: 'Asia Pacific',  x: 400, y: 30 },
+  { id: 'n4', label: 'Manufacturer', name: 'TechCorp',      x: 180, y: 200 },
+  { id: 'n5', label: 'Manufacturer', name: 'PeriphCo',      x: 560, y: 200 },
+  { id: 'n6', label: 'Manufacturer', name: 'ComfortMakers', x: 700, y: 200 },
+  { id: 'n7', label: 'Manufacturer', name: 'ChipMakers',    x: 380, y: 140 },
+  { id: 'n8', label: 'Product',      name: 'Laptop Pro',    x: 80,  y: 320 },
+  { id: 'n9', label: 'Product',      name: 'Tablet X',      x: 280, y: 320 },
+  { id: 'n10',label: 'Product',      name: 'Mouse',         x: 530, y: 320 },
+  { id: 'n11',label: 'Product',      name: 'Chair Ergo',    x: 700, y: 320 },
+  { id: 'n12',label: 'Category',     name: 'Electronics',   x: 300, y: 240 },
+  { id: 'n13',label: 'Category',     name: 'Furniture',     x: 560, y: 280 },
+];
+const gEdges = [
+  { from: 'n4', to: 'n1', type: 'LOCATED_IN' },
+  { from: 'n5', to: 'n2', type: 'LOCATED_IN' },
+  { from: 'n6', to: 'n2', type: 'LOCATED_IN' },
+  { from: 'n7', to: 'n3', type: 'LOCATED_IN' },
+  { from: 'n7', to: 'n4', type: 'SUPPLIES' },
+  { from: 'n7', to: 'n5', type: 'SUPPLIES' },
+  { from: 'n8', to: 'n4', type: 'MANUFACTURED_BY' },
+  { from: 'n9', to: 'n4', type: 'MANUFACTURED_BY' },
+  { from: 'n10',to: 'n5', type: 'MANUFACTURED_BY' },
+  { from: 'n11',to: 'n6', type: 'MANUFACTURED_BY' },
+  { from: 'n8', to: 'n12',type: 'BELONGS_TO' },
+  { from: 'n9', to: 'n12',type: 'BELONGS_TO' },
+  { from: 'n10',to: 'n12',type: 'BELONGS_TO' },
+  { from: 'n11',to: 'n13',type: 'BELONGS_TO' },
+];
+
+const nodeColors = {
+  Product: { stroke: '#4db33d', fill: '#091a08' },
+  Manufacturer: { stroke: '#0087cc', fill: '#04101a' },
+  Category: { stroke: '#7c3aed', fill: '#10081a' },
+  Region: { stroke: '#f6ad55', fill: '#1a1008' }
+};
+
+function drawGraph() {
+  const svg = document.getElementById('graph-svg');
+  if (!svg) return;
+  const W = svg.clientWidth || 800;
+  const H = 380;
+  const scaleX = W / 820;
+
+  let html = '';
+
+  // Edges
+  gEdges.forEach(e => {
+    const a = gNodes.find(n => n.id === e.from);
+    const b = gNodes.find(n => n.id === e.to);
+    if (!a || !b) return;
+    const x1 = a.x * scaleX, y1 = a.y + 10;
+    const x2 = b.x * scaleX, y2 = b.y + 10;
+    const mx = (x1+x2)/2, my = (y1+y2)/2;
+    const angle = Math.atan2(y2-y1, x2-x1) * 180 / Math.PI;
+    html += `<line class="link" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" marker-end="url(#arrow)"/>`;
+    html += `<text class="link-label" x="${mx}" y="${my-4}" transform="rotate(${angle > 90 || angle < -90 ? angle+180 : angle},${mx},${my})">${e.type}</text>`;
+  });
+
+  // Nodes
+  gNodes.forEach(n => {
+    const c = nodeColors[n.label] || { stroke: '#888', fill: '#222' };
+    const x = n.x * scaleX, y = n.y + 10;
+    const r = n.label === 'Product' ? 22 : n.label === 'Manufacturer' ? 26 : 18;
+    html += `<g class="node ${n.label.toLowerCase()}" onclick="selectNode('${n.id}')">
+      <circle cx="${x}" cy="${y}" r="${r}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="2"/>
+      <text x="${x}" y="${y - r - 4}" style="font-size:10px;fill:#8892a4">${n.id}</text>
+      <text x="${x}" y="${y + 4}">${n.name.split(' ')[0]}</text>
+    </g>`;
+  });
+
+  svg.innerHTML = `
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#3a4060"/>
+      </marker>
+    </defs>
+    ${html}`;
+}
+
+function selectNode(id) {
+  const node = gNodes.find(n => n.id === id);
+  const edges = gEdges.filter(e => e.from === id || e.to === id).map(e => ({
+    ...e,
+    fromName: gNodes.find(n => n.id === e.from)?.name,
+    toName: gNodes.find(n => n.id === e.to)?.name,
+  }));
+  const box = document.getElementById('res-neo4j');
+  box.className = 'response-box success';
+  box.textContent = JSON.stringify({ db: 'Neo4j', node, relationships: edges }, null, 2);
+}
+
+function neo4jQuery(type) {
+  const box = document.getElementById('res-neo4j');
+  box.className = 'response-box success';
+  const nodes = type === 'products'
+    ? gNodes.filter(n => n.label === 'Product')
+    : gNodes.filter(n => n.label === 'Manufacturer');
+  box.textContent = JSON.stringify({
+    db: 'Neo4j',
+    cypher: type === 'products' ? 'MATCH (p:Product) RETURN p' : 'MATCH (m:Manufacturer) RETURN m',
+    count: nodes.length,
+    nodes
+  }, null, 2);
+}
+
+function neo4jNodeQuery() {
+  const id  = document.getElementById('graph-node-id').value.trim();
+  selectNode(id);
+}
+
+function neo4jPath() {
+  const from = document.getElementById('path-from').value.trim();
+  const to   = document.getElementById('path-to').value.trim();
+  const box  = document.getElementById('res-path');
+
+  // BFS
+  const visited = new Set([from]);
+  const queue   = [[from]];
+  let found     = null;
+  while (queue.length && !found) {
+    const path = queue.shift();
+    const curr = path[path.length - 1];
+    if (curr === to) { found = path; break; }
+    gEdges.forEach(e => {
+      const next = e.from === curr ? e.to : (e.to === curr ? e.from : null);
+      if (next && !visited.has(next)) {
+        visited.add(next);
+        queue.push([...path, next]);
+      }
+    });
+  }
+
+  if (!found) {
+    box.className = 'response-box error';
+    box.textContent = JSON.stringify({ error: 'No path found', from, to }, null, 2);
+    return;
+  }
+  box.className = 'response-box success';
+  box.textContent = JSON.stringify({
+    db: 'Neo4j',
+    cypher: `MATCH p=shortestPath((a {id:'${from}'})-[*]-(b {id:'${to}'})) RETURN p`,
+    path: found.map(id => gNodes.find(n => n.id === id)),
+    hops: found.length - 1
+  }, null, 2);
+}
+</script>
+</body>
+</html>
